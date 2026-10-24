@@ -1,0 +1,31 @@
+[project]
+name = "terraform-copilot-agent"
+version = "0.1.0"
+description = "An AI-powered Terraform assistant with deterministic execution, safety policies, validation, and MCP integration."
+readme = "README.md"
+authors = [
+    { name = "lightsspeed", email = "akhileshias91@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+terraform-copilot-agent = "terraform_copilot_agent:main"
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["src"]
