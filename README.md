@@ -76,7 +76,48 @@ The system is separated into decoupled, single-responsibility layers:
 
 ---
 
-## 5. Development Workflow & Trunk-Based Development
+---
+
+## 5. Security Architecture & Interfaces
+
+The Security and Policy Layer (`terraform_copilot_agent.security`) enforces strict deterministic controls before any file is read/written or any subprocess is spawned:
+
+### 1. `PathValidator`
+- **Containment**: Resolves candidate paths against a designated canonical `workspace_root` directory.
+- **Traversal Protection**: Rejects parent directory traversal (`../`) and nested traversal attempts (`PathTraversalError`).
+- **Symlink Escapes**: Detects symlink chains pointing outside the workspace boundary (`SymlinkEscapeError`).
+- **Prospective Destinations**: Safely validates destination paths that do not yet exist on disk (e.g., when generating new configuration files), ensuring their prospective paths remain strictly contained.
+
+### 2. `SafetyPolicy` & `CommandSpec`
+- **Closed Allowlist**: Only three deterministic Terraform subcommands are permitted in V1:
+  - `terraform fmt -check` (optionally targeting a safe relative file within the workspace)
+  - `terraform init -backend=false`
+  - `terraform validate -json`
+- **Shell Injection Immunity**: Scans arguments and flags for shell metacharacters (`;`, `&`, `|`, `` ` ``, `$`, `\n`, etc.) and rejects arbitrary executable names.
+- **State Mutation Block**: Explicitly rejects `apply`, `destroy`, `import`, `state`, `taint`, `untaint`, `refresh`, and other mutating commands (`ForbiddenCommandError`).
+- **Subprocess Argument Lists**: Generates typed argument lists (`list[str]`) for `subprocess.run(..., shell=False)`.
+
+### 3. Sensitive File Policy
+- **Denylist Blocking**: Blocks read and write access to files matching sensitive patterns (`SensitiveFileError`):
+  - State files: `*.tfstate`, `*.tfstate.*`, `*.tfstate.backup` (case-insensitive)
+  - Plan files: `*.tfplan`
+  - Secret & environment files: `.env`, `.env.*`
+  - Private keys: `*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `*.pkcs12`, `*.pfx`
+  - Credentials: `*credentials*`, `*secret*`
+
+### 4. `Redactor`
+- **Credential Scrubbing**: Heuristically masks common sensitive tokens in command outputs, diagnostics, and configurations:
+  - AWS Access Key IDs (`[REDACTED_AWS_KEY]`)
+  - AWS Secret Access Keys (`[REDACTED_AWS_SECRET]`)
+  - PEM / OpenSSH private key blocks (`[REDACTED_PRIVATE_KEY]`)
+  - HTTP Bearer authorization tokens (`[REDACTED_BEARER_TOKEN]`)
+  - Password, secret, and API token assignments (`[REDACTED_CREDENTIAL]`)
+- **Diagnostic Preservation**: Preserves normal Terraform error diagnostics, syntax messages, HCL definitions, and line numbers.
+- **Security Limitation**: Regex scrubbing is a best-effort defense-in-depth mitigation and does not substitute for a complete Data Loss Prevention (DLP) system.
+
+---
+
+## 6. Development Workflow & Trunk-Based Development
 
 This project strictly follows **Trunk-Based Development**:
 
@@ -115,10 +156,10 @@ uv run pytest -v
 
 ---
 
-## 6. Project Roadmap
+## 7. Project Roadmap
 
 - [x] **Milestone 1**: Project Scaffolding, Trunk-Based Git Setup, CI Foundation, and Architecture Documentation.
-- [ ] **Milestone 2**: Security & Policy Layer (Path containment, command allowlist, secret redaction, unit tests).
+- [x] **Milestone 2**: Security & Policy Layer (Path containment, command allowlist, secret redaction, unit tests).
 - [ ] **Milestone 3**: Deterministic Terraform Runner & Safe File Manager (Subprocess execution, timeouts, diagnostics parsing, integration tests).
 - [ ] **Milestone 4**: Mock LLM Provider, Execution History, & Bounded Agent Orchestration.
 - [ ] **Milestone 5**: Official MCP Server Adapter & Tool Dispatch.
